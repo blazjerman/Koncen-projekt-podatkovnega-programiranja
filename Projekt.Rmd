@@ -1,0 +1,307 @@
+---
+title: "Projekt"
+author: "Blaž Jerman"
+date: "2023-06-04"
+output: 
+  html_document: 
+    toc: yes
+    toc_float: yes
+bibliography: bibliography.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+
+```
+## Uvod
+
+Za nabor podatkov (dataset) sem si izbral podatke o uspešnosti študentov na izpitih v Ameriki. Podatki so izmišljeni in so namenjeni samo za učenje in testiranje. Avtor, ki je to objavil na strani Kaggle ni nikjer omenil, da so podatki izmišljeni. Na to se je pritožilo veliko uporabnikov. Seveda pa, če si sledil povezavi, ki jo je pripel se lahko najde pravega avtorja podatkov. Na tej strani je lepo razvidno, da podatki niso iz realnega okolja.
+
+Nabor podatkov nam prikazuje rezultate treh testov učencev na javnih osnovnih in srednjih šolah v zda ZDA. Poleg samih rezultatov imamo podane še dodatne lastnosti, ki lahko vplivajo na uspešnost učencev. Spletna stran podatkov nudi tri različne datoteke podatkov, razlika med njimi je samo v velikosti vzorca. Jaz sem izbral največjo, ta ima 1000 učencev.
+
+### Kaj lahko preučimo na teh podatkih?
+
+Opis podatkov se nahaja na temi: [Prikaz in opis podatkov.](#prikaz-podatkov)
+
+Iz danih podakov se da naredidi kar nekaj zanimivih raziskav. Nekaj idej za raziskavo je podal že avtor podatkov na spletni strani. Eno od vprašanje se glasi: Kakšna je povezanost med predpripravo in rezultati izpitov? <br><br>
+
+
+Za prikaz znanja r-ja sem se odločil analizirati:
+
+1. razlike povprečja rezultatov učencev glede na različne značilnost kot so spol, delo staršev in predpriprave.
+2. prikaz porazdelitve ocen
+3. uporaba filtra za prikaz samo tistih, ki so imeli povprečje večje od x
+4. linearna povezanost medsebojnih rezultatov
+
+
+
+## Nastavitev in priprava podatkov
+
+Ker so podatki umetni teh ni treba popravljati, imamo tudi samo eno tabelo tako, da so imena stolpcev vedno enaka. Podatki ne vsebujejo neznanih vrednosti. Za lažje razumvanje sem imena stolpcev in rezultate preimenoval v slovenščino. Tako, da imam konsistentno čez cel projekt vse v slovenščini. Eno posebnost, ki sem jo naredil je sprememba tekstovnega zapisa starševske stopnje izobrazbe šole v številčno, to pa zato, da je stopnja izobrazbe bolj pregledna. <br><br>
+Izobrazbe si sledijo od najnižje do najvišje od 1 pa do 6 (razvidno tudi v sami kodi):
+
+  1. some high school
+  2. high school 
+  3. some college 
+  4. associate's degree
+  5. bachelor's degree
+  6. master's degree
+
+```{r}
+
+
+preberi.csvs <- \(filePath){
+  df <- read.csv(file.path("./", filePath))
+  return(df)
+}
+
+
+podatki <- "exams.csv" %>% preberi.csvs()
+
+#Preimenovanje podatki v Slovenščino in spremenitev izobrazbe staršev v številčni zapis.
+
+colnames(podatki) <- c(
+  "Spol",
+   "Rasa/etničnost",
+   "Izobrazba.staršev",
+   "Kosilo" ,
+   "Vkjučenost.v.priprave.predmeta",
+   "Rezultati.matematike",
+   "Rezultati.branja", 
+   "Rezultati.pisanja"
+)
+
+preslikava_izobrazbe <- c(
+  "some high school" = 1,
+  "high school" = 2,
+  "some college" = 3,
+  "associate's degree" = 4,
+  "bachelor's degree" = 5,
+  "master's degree" = 6
+)
+podatki$Izobrazba.staršev <- preslikava_izobrazbe[podatki$Izobrazba.staršev]
+
+preslikava_spola <-c(
+  "male" = "fant",
+  "female" = "punca"
+)
+
+podatki$Spol <- preslikava_spola[podatki$Spol]
+
+preslikava_priprave <- c(
+  "completed" = "opravil",
+  "none" = "ni opravil"
+)
+
+podatki$Vkjučenost.v.priprave.predmeta <- preslikava_priprave[podatki$Vkjučenost.v.priprave.predmeta]
+
+preslikava_kosila <- c(
+  "free/reduced" = "zastonj/zmanjšano",
+  "standard" = "standardno"
+ )
+
+podatki$Kosilo <- preslikava_kosila[podatki$Kosilo]
+```
+
+## Prikaz in opis podatkov{#prikaz-podatkov}
+
+V tabeli imamo osem podatkov za vsakega učenca. Teh osem podatkov predstavlja:
+
+  1. Spol - dve možnosti (fant ali punca)
+  2. Raso - ta podatek ni bil opisan na strani avtorja predvidevam, da je to namerno. Vrednosti so od A do E.
+  3. Izobrazbo staršev - imamo šest stopenj izobrazbe prikazanih številsko od 1 do 6, 1 je najnižja. (natančen opis prikazan v prejšnji temi)
+  4. Kosilo - vrsta izbire kosil med osnovno (brezplačno) in dodatno
+  5. Vključenost v priprave predmeta - ta podatek nam pove ali je učenec bil udeležen na tečaju priprave za izpite. Vrednost je binarna.
+  6. Rezultati matematike - rezultati, ki jih je učenec pridobil pri izpitu za matematiko. Vrednosti so v procenit 0%-100%.
+  7. Rezultati branja - rezultati, ki jih je učenec pridobil pri izpitu za branje. Vrednosti so v procenit 0%-100%.
+  8. Rezultati pisanja - rezultati, ki jih je učenec pridobil pri izpitu za pisanje. Vrednosti so v procenit 0%-100%.
+
+V tabeli vodimo 5 vzorcen nabora podatkov.
+```{r echo = FALSE}
+knitr::kable(podatki[1:5, ], caption = 'Prikaz vzorca podatkov')
+```
+
+```{r echo = FALSE, include=FALSE}
+#Če se include da na TRUE lahko vidimo osnovne podatke.
+table(podatki$Spol)
+table(podatki$Rasa)
+summary(podatki$Izobrazba.staršev)
+table(podatki$Kosilo)
+table(podatki$Vkjučenost.v.priprave.predmeta)
+summary(podatki$Rezultati.matematike)
+summary(podatki$Rezultati.branja)
+summary(podatki$Rezultati.pisanja)
+```
+## Razlike povprečja rezultatov učencev
+
+V nadaljevanju bomo videli, kako razne lastnosti vplivajo na povprečje ocen izpitov. 
+
+
+### Razlike rezultatov pri spolih
+
+V tabeli imamo 1000 učencev od tega 519 <font color="red">deklet</font> in 481 <font color="blue">fantov</font>. Odspodaj vidimo grafičen prikaz podatkov. 
+
+```{r echo = FALSE}
+#Razmerje med dekleti in fanti
+
+torta<-data.frame(labels=c("Dekleta","Fantje"), values=c(unname(table(podatki$Spol))))
+
+ggplot(torta, aes(x="", y=values,fill=labels))+
+  geom_bar(stat = "identity")+
+  coord_polar("y")+
+  scale_fill_manual(values=c("red", "blue"))+
+  labs(title="Razlike rezultatov pri spolih",x="",y="")+
+  theme_void()+
+  theme(
+        panel.grid  = element_blank(),
+        legend.title=element_blank()
+        )
+```
+
+V spodnji tabeli imamo prikazano povprečje ocen za vsak predmet tako za dekleta kot za fante. Poleg povrečja vsakega predmeta imamo tudi dodatno vrstico, ki prikazuje skupno povprečje vseh predmetov. 
+
+```{r echo = FALSE}
+#Razlike pri spolih
+povprečna_razlika_med_spoli <- podatki %>% group_by(Spol) %>% summarize(
+  Rezultati.matematike = mean(Rezultati.matematike),
+  Rezultati.branja = mean(Rezultati.branja),
+  Rezultati.pisanja =mean(Rezultati.pisanja),
+  Rezultati.povprečje = mean(c(Rezultati.matematike, Rezultati.branja, Rezultati.pisanja)))
+
+knitr::kable(povprečna_razlika_med_spoli, caption = 'Razlike rezultatov pri spolih')
+```
+Seveda, da bi si lahko podatke lažje predstavljali so odspodaj grafično prikazani. Na levi imamo fante in na desni punce. Vsaka barva predstavlja povprečno oceno predmeta, izjema je le rumena barva, ki predstavlja povprečno oceno vseh testov. 
+```{r echo = FALSE}
+ggplot(gather(povprečna_razlika_med_spoli, key = "Score", value = "Average", -Spol), aes(x = Spol, y = `Average`, fill = `Score`)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Povprečje rezultatov glede na spol ", x = "Spol", y = "Povprečje") +
+  scale_fill_manual(values = c("Red", "Blue", "Green", "Yellow")) +
+  coord_cartesian(ylim=c(60,75))
+```
+
+Iz grafa je razvidno da so na splošnih rezultatih boljše punce. Če pa pogledamo posamične predmete vidimo, da so fantje boljši v matematiki in slabši v pisanju in branju od punc.
+
+### Razlike rezultatov glede na izobrazbo staršev
+
+Na spodnjem grafu je razvidno, da višjo izobrazbo kot imajo starši bolj so učenci uspešni v testih in obratno.
+
+```{r echo = FALSE}
+#Razlika glede na starševsko izobrazbo
+povprečna_razlika_glede_na_izobrazbo_staršev <- podatki %>% group_by(Izobrazba.staršev) %>% summarize(
+  Rezultati.matematike = mean(Rezultati.matematike),
+  Rezultati.branja = mean(Rezultati.branja),
+  Rezultati.pisanja =mean(Rezultati.pisanja),
+  Rezultati.povprečje = mean(c(Rezultati.matematike, Rezultati.branja, Rezultati.pisanja)))
+
+
+knitr::kable(povprečna_razlika_glede_na_izobrazbo_staršev, caption = 'Razlike rezultatov glede na starševsko izobrazbo')
+```
+
+### Razlike rezultatov glede na pred priprave
+
+Pri tej raziskavi je pričakovano da bodo tisti učenci, ki se bodo udeležili predpriprav boljše izkazali na testih. Če pogledamo spodnjo tabelo, kjer imamo prikazano povprečje vseh izpitop na koncu pa imamo še prikazano skupno povprečje izpitov glede na predpriprave. V tabeli se lepo vidi, da je povprečje tistih, ki so ga opravili veliko večje v vseh področjih. Največja razlika je pri testu pisanja. 
+
+```{r echo = FALSE}
+#Razlika glede pripravljanje
+povprečje_izpitov_glede_na_priprave <- podatki %>% group_by(Vkjučenost.v.priprave.predmeta) %>% summarize(
+  Rezultati.matematike = mean(Rezultati.matematike),
+  Rezultati.branja = mean(Rezultati.branja),
+  Rezultati.pisanja = mean(Rezultati.pisanja),
+  Rezultati.povprečje = mean(c(Rezultati.matematike, Rezultati.branja, Rezultati.pisanja)))
+
+knitr::kable(povprečje_izpitov_glede_na_priprave, caption = 'Razlike rezultatov glede na predpropravo')
+```
+
+
+
+
+
+### Prikaz povprečja rezultatov
+
+Spodnji graf prikazuje porazdeljenost povprečja rezultatov učencov, stolpec predstavlja korak desetih procentov. Porazdeljenost je zelo podobna normalni (Gaussovi) tako je tudi pričakovano.
+
+```{r echo = FALSE}
+filtrirani_podatki_glede_na_ocene <- podatki
+filtrirani_podatki_glede_na_ocene$Povprečni.rezultati <- rowMeans(filtrirani_podatki_glede_na_ocene[, c("Rezultati.matematike", "Rezultati.branja", "Rezultati.pisanja")])
+
+ggplot(filtrirani_podatki_glede_na_ocene, aes(x = Povprečni.rezultati)) +
+  geom_histogram(binwidth = 5, boundary = 0, fill = "steelblue") +
+  labs(x = "Povprečni.rezultati", y = "Število") +
+  scale_x_continuous(breaks = seq(0, 100, 5 )) +
+  theme_minimal()
+```
+
+
+
+## Učenci z vsemi možnimi točkami
+
+Spodnji graf prikazuje učence, ki so pisali vse tri izpite brez napake. Tako kot smo že prej opazili se vidi, da imajo starši najboljših najvišjo stopnjo izobrazbe in vsi štirje so tudi bili udeleženi predpriprav.
+
+```{r echo = FALSE}
+ocena <- 100
+filtrirani_podatki_glede_na_ocene <- filter(filtrirani_podatki_glede_na_ocene, Povprečni.rezultati == ocena)
+#filtrirani_podatki_glede_na_ocene <- filtrirani_podatki_glede_na_ocene[order(filtrirani_podatki_glede_na_ocene$Povprečni.rezultati, decreasing=TRUE), ]
+knitr::kable(filtrirani_podatki_glede_na_ocene, caption = 'Učenci brez napake')
+```
+
+
+
+
+
+
+## Linearna regresija
+
+V naslednjih grafih bom prikazal medsebojno povezanost ocen predmetov. Za to sem se odločil, ker sem med izdelavo prejšnjih grafov posumil, da sta si rezultat branja in pisanja zelo povezana. Že samo na prvem grafu, kjer sem primerjal razlike o spolih se vidi, da sta stolpca testa branja in pisanja zelo podobna.
+
+### Povezava med branjem in pisanjem
+
+Spodnji graf prikazuje povezanost rezultatov branja in pisanja. Modra črta prikazuje linearno premico y = mx + b, ki je zelo blizu m = 1 in b = 0. Pozitivna povezanost. X prikazuje rezultate branja in y rezultate pisanja.
+
+Že brez dodatnih podatkov regresije vidimo, da sta si branje in pisanje zelo povezana. Za dokaz lahko pogledamo s funkcijo summary() kjer vidimo da je p <2e-16. (Dodatni podatki so prikazani pod grafom)
+
+```{r echo = FALSE}
+#Linearna regresija med rezultat branja in rezultat pisanja.
+linearna_regresija_branje_pisanje <- lm(Rezultati.pisanja ~Rezultati.branja, data = podatki)
+
+ggplot(linearna_regresija_branje_pisanje, aes(x = Rezultati.branja, y = Rezultati.pisanja))+
+  geom_point() +
+  labs(title = "Linearna regresija", x ="Rezultat branja", y = "Rezultat pisanja")+
+  geom_smooth(method = "lm", formula=y~x, se= FALSE, color = "blue" )
+
+
+```
+```{r echo = FALSE}
+summary(linearna_regresija_branje_pisanje)
+```
+
+### Povezava med matematiko in pisanjem
+
+Spodnji graf prikazuje linearno regresijo med pisanjem in matematiko. Povezanost je manjša, iz grafa se to vidi ker so pike bolj razpršene okoli linearne premice. Podoben graf nastane, če spremenimo rezultate pisanja za branje.
+
+```{r echo = FALSE}
+#Linearna regresija med rezultat pisanja in rezultat matematike.
+linearna_regresija_matematika_pisanje <- lm(Rezultati.matematike ~ Rezultati.pisanja, data = podatki)
+
+ggplot(linearna_regresija_matematika_pisanje, aes(x = Rezultati.matematike, y = Rezultati.pisanja))+
+  geom_point() +
+  labs(title = "Linearna regresija", x ="Rezultat matematika", y = "Rezultat pisanja")+
+  geom_smooth(method = "lm", formula=y~x, se= FALSE, color = "blue" )
+
+```
+
+## Zaključek
+
+V projektu sem analiziral podatke o uspešnosti študentov na izpitih v Ameriki. Kljub temu, da so podatki izmišljeni, sem lahko iz njih pridobil nekaj zanimivih ugotovitev. Projekt mi je prav prišel za ponovitev r-ja.
+
+
+
+## Referenciranje
+
+Reference sem pridobil iz naslednjih povezav: [@Spletna_stran_profesorja], [@originalna_stran] in [@statistika].
+
+## Literatura
